@@ -1,5 +1,9 @@
 module CartesianFrontTracking
 using LinearAlgebra
+using ColorSchemes
+using Roots
+using Plots
+Plots.default(show = true)
 # Write your package code here.
 
 struct Mesh
@@ -17,10 +21,6 @@ mesh2D = Mesh([x, y])
 # Pour une grille 3D
 z = collect(-5:0.5:5)
 mesh3D = Mesh([x, y, z])
-
-using Plots
-using IterTools
-Plots.default(show = true)
 
 # Extraire les coordonnées x, y et z du maillage
 x_coords = mesh3D.grids[1]
@@ -52,13 +52,12 @@ function signed_distance_sphere(point::Vector{Float64}, r::Float64)
 end
 
 # Créer une sphère de rayon r
-r =2.0
+r = 2.0
 sphere = point -> signed_distance_sphere(point, r)
 
 # Calculer les valeurs de la sdf aux sommets du maillage
 phi = [sphere([x[i], y[i], z[i]]) for i in 1:length(x)]
 
-using ColorSchemes
 
 # Convertir les valeurs de la sdf en couleurs
 colors = [get(ColorSchemes.rainbow, p) for p in phi]
@@ -70,7 +69,6 @@ readline()
 
 @show mesh3D
 
-using Roots
 
 function obtenir_aretes(maillage)
     x, y, z = maillage
@@ -89,9 +87,6 @@ end
 
 # Obtenir toutes les arêtes du maillage
 aretes = obtenir_aretes(mesh3D.grids)
-
-# Définir la fonction Phi
-sphere = point -> signed_distance_sphere(point, r)
 
 # Créer une liste pour stocker les points P où Phi=0
 points_P = []
@@ -128,6 +123,129 @@ readline()
 #Etat Initial : Les zéros ont été repérés dans l'espace 3D : (xp,yp,zp). 
 #Les zéros sont les points où la fonction Phi s'annule.
 
+# Calcul de la normale à la surface
+using ForwardDiff
+
+# Définir la fonction Phi
+function Phi(point)
+    # Remplacer par la définition réelle de votre fonction
+    x, y, z = point
+    return x^2 + y^2 + z^2 - r^2
+end
+
+# Calculer le gradient de Phi en un point
+function gradient_Phi(point)
+    return ForwardDiff.gradient(Phi, point)
+end
+
+# Calculer le vecteur normal en un point
+function normal_vector(point)
+    # Calculer le gradient de Phi au point
+    gradient = gradient_Phi(point)
+    
+    # Le vecteur normal est le gradient normalisé
+    normal = gradient / norm(gradient)
+    
+    return normal
+end
+
+# Calculer le vecteur normal aux points P
+normals = [normal_vector(p) for p in points_P]
+
+"""
+# Créer une nouvelle figure
+plot()
+
+# Ajouter la sphère à la figure
+# Définir les coordonnées de la sphère
+theta = 0:0.01:2*pi
+phi = 0:0.01:pi
+x = r * cos.(theta) * sin.(phi)'
+y = r * sin.(theta) * sin.(phi)'
+z = r * ones(length(theta)) * cos.(phi)'
+
+# Ajouter la sphère à la figure
+surface(x, y, z, alpha=0.5, color=:blue)
+
+# Ajouter les vecteurs normaux à la figure
+for (point, normal) in zip(points_P, normals)
+    point = collect(point)
+    normal = collect(normal)
+    quiver!(point[1:1], point[2:2], point[3:3], quiver=(normal[1:1], normal[2:2], normal[3:3]), color=:red)
+end
+
+# Afficher la figure
+display(plot)
+readline()
+"""
+
+# Calculer le vecteur tangentiel à la surface
+function tangent_vector(normal)
+    # Générer un vecteur aléatoire
+    random_vector = rand(3)
+    
+    # Calculer le vecteur tangentiel
+    tangent = cross(normal, random_vector)
+    
+    return tangent
+end
+
+# Calculer le vecteur tangentiel aux points P
+tangents = [tangent_vector(n) for n in normals]
+
+"""
+# Créer une nouvelle figure
+plot()
+
+# Ajouter la sphère à la figure
+# Définir les coordonnées de la sphère
+theta = 0:0.01:2*pi
+phi = 0:0.01:pi
+x = r * cos.(theta) * sin.(phi)'
+y = r * sin.(theta) * sin.(phi)'
+z = r * ones(length(theta)) * cos.(phi)'
+surface(x, y, z, alpha=0.5, color=:blue)
+
+# Ajouter les vecteurs normaux et tangentiels à la figure
+for (point, normal, tangent) in zip(points_P, normals, tangents)
+    point = collect(point)
+    normal = collect(normal)
+    tangent = collect(tangent)
+    quiver!(point[1:1], point[2:2], point[3:3], quiver=(normal[1:1], normal[2:2], normal[3:3]), color=:red)
+    quiver!(point[1:1], point[2:2], point[3:3], quiver=(tangent[1:1], tangent[2:2], tangent[3:3]), color=:green)
+end
+
+# Afficher la figure
+display(plot)
+readline()
+"""
+
+# Calcul de la courbure
+#https://u.cs.biu.ac.il/~katzmik/goldman05.pdf
+function curvature(point)
+    # Calculer le gradient de Phi au point
+    gradient = ForwardDiff.gradient(Phi, point)
+    
+    # Calculer la hessienne de Phi au point
+    hessian = ForwardDiff.hessian(Phi, point)
+    adjoint_hessian = det(hessian) * inv(hessian)
+    
+    # Calculer la courbure gaussienne
+    gaussian_curvature = gradient' * adjoint_hessian * gradient / norm(gradient)^4
+
+    # Calculer la courbure moyenne
+    mean_curvature = (gradient' * hessian * gradient - norm(gradient)^2 * tr(hessian))/(2*norm(gradient)^3)
+    
+    return gaussian_curvature, mean_curvature
+end
+
+# Calculer la courbure aux points P
+gaussian_curvature = [curvature(p)[1] for p in points_P]
+mean_curvature = [curvature(p)[2] for p in points_P]
+
+
+
+"""
 function move_point(point, time)
     # Définir un vecteur de déplacement
     displacement = [sin(time), cos(time), sin(time)*cos(time)]
@@ -154,11 +272,9 @@ for step in 1:100
     for point in points_P
         scatter!(p, [point[1]], [point[2]], [point[3]], color = :red, markersize = 4)
     end
-    
-    savefig(p, "step_$(lpad(step, 3, '0')).png")
-
+    display(p)
 end
-
+"""
 
 """
 # Définir les sommets du cube
