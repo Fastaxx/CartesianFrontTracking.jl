@@ -1,9 +1,11 @@
 module CartesianFrontTracking
+
 using LinearAlgebra
 using ColorSchemes
 using Roots
 using Plots
 Plots.default(show = true)
+
 # Write your package code here.
 
 struct Mesh
@@ -37,6 +39,7 @@ for x in x_coords
     end
 end
 
+"""
 # Extraire les coordonnées x, y et z de tous les points
 x = [p[1] for p in points]
 y = [p[2] for p in points]
@@ -45,20 +48,24 @@ z = [p[3] for p in points]
 # Créer un nuage de points
 scatter(x, y, z, xlabel="x", ylabel="y", zlabel="z", title="3D Mesh")
 #readline()
+"""
 
-# Définir la fonction de distance signée pour une sphère
-function signed_distance_sphere(point::Vector{Float64}, r::Float64)
-    return norm(point) - r
+# Définir la fonction de distance signée 
+function signed_distance(point::Vector{Float64}, r::Float64)
+    x, y, z = point
+    R = r
+    a = 1.0
+    return x^2 + y^2 + z^2 - r^2
 end
 
 # Créer une sphère de rayon r
 r = 2.0
-sphere = point -> signed_distance_sphere(point, r)
+sphere = point -> signed_distance(point, r)
 
 # Calculer les valeurs de la sdf aux sommets du maillage
 phi = [sphere([x[i], y[i], z[i]]) for i in 1:length(x)]
 
-
+"""
 # Convertir les valeurs de la sdf en couleurs
 colors = [get(ColorSchemes.rainbow, p) for p in phi]
 
@@ -66,10 +73,11 @@ colors = [get(ColorSchemes.rainbow, p) for p in phi]
 p = scatter(x, y, z, color=colors, xlabel="x", ylabel="y", zlabel="z", title="Signed Distance Function")
 surface!(p, [0,1], [0,1], (x,y)->0, opacity=0, color=:rainbow, colorbar_title="SDF Value")
 readline()
+"""
 
 @show mesh3D
 
-
+# Obtenir les arêtes du maillage
 function obtenir_aretes(maillage)
     x, y, z = maillage
     aretes = []
@@ -99,12 +107,12 @@ for arete in aretes
         # Utiliser la méthode de la bissection pour trouver le point P
         t0 = find_zero(f, (0.0, 1.0), Bisection())
         x0 = arete[1] + t0 * (arete[2] - arete[1])
-        println("Le point P où Phi=0 sur l'arête entre les points $(arete[1]) et $(arete[2]) est $x0")
+        #println("Le point P où Phi=0 sur l'arête entre les points $(arete[1]) et $(arete[2]) est $x0")
         
         # Ajouter le point P à la liste des points P
         push!(points_P, x0)
     catch e
-        println("Aucun point P trouvé sur l'arête entre les points $(arete[1]) et $(arete[2])")
+        #println("Aucun point P trouvé sur l'arête entre les points $(arete[1]) et $(arete[2])")
     end
 end
 
@@ -122,6 +130,14 @@ readline()
 
 #Etat Initial : Les zéros ont été repérés dans l'espace 3D : (xp,yp,zp). 
 #Les zéros sont les points où la fonction Phi s'annule.
+
+# Calcul de la longueur d'arc
+function arc_length(point1, point2)
+    return norm(point2 - point1)
+end
+
+# Calculer la longueur d'arc entre chaque paire de points P
+arc_lengths = [arc_length(points_P[i], points_P[i+1]) for i in 1:length(points_P)-1]
 
 # Calcul de la normale à la surface
 using ForwardDiff
@@ -221,7 +237,7 @@ readline()
 """
 
 # Calcul de la courbure
-#https://u.cs.biu.ac.il/~katzmik/goldman05.pdf
+# https://u.cs.biu.ac.il/~katzmik/goldman05.pdf
 function curvature(point)
     # Calculer le gradient de Phi au point
     gradient = ForwardDiff.gradient(Phi, point)
@@ -243,28 +259,160 @@ end
 gaussian_curvature = [curvature(p)[1] for p in points_P]
 mean_curvature = [curvature(p)[2] for p in points_P]
 
+# Faces 
+# Calculer les faces du maillage
+function cell_faces(maillage)
+    x, y, z = maillage
+    faces = []
+    for i in 1:length(x)-1
+        for j in 1:length(y)-1
+            for k in 1:length(z)-1
+                # Les faces de la cellule sont définies par les points de grille (x[i], y[j], z[k]) et (x[i+1], y[j+1], z[k+1])
+                # Il y a six faces pour chaque cellule : deux dans chaque direction
+                push!(faces, [(x[i], y[j], z[k]), (x[i+1], y[j], z[k])]) # Faces en x
+                push!(faces, [(x[i], y[j], z[k]), (x[i], y[j+1], z[k])]) # Faces en y
+                push!(faces, [(x[i], y[j], z[k]), (x[i], y[j], z[k+1])]) # Faces en z
+                push!(faces, [(x[i+1], y[j+1], z[k+1]), (x[i], y[j+1], z[k+1])]) # Faces en x
+                push!(faces, [(x[i+1], y[j+1], z[k+1]), (x[i+1], y[j], z[k+1])]) # Faces en y
+                push!(faces, [(x[i+1], y[j+1], z[k+1]), (x[i+1], y[j+1], z[k])]) # Faces en z
+            end
+        end
+    end
+    return faces
+end
 
+# Repérer les faces de chaque cellule
+faces = cell_faces(mesh3D.grids)
+
+using Statistics
+
+# Calculer le centre d'une face
+function face_center(face)
+    x = mean([f[1] for f in face])
+    y = mean([f[2] for f in face])
+    z = mean([f[3] for f in face])
+    return [x, y, z]
+end
+
+# Calculer les centres des faces
+face_centers = [face_center(f) for f in faces]
+
+# Initialiser un champ de vitesse face-centered
+function velocity_field(point, t)
+    # Définir un champ de vitesse variable dans l'espace et le temps
+    return [sin(point[1] + t), cos(point[2]), sin(point[1])*cos(point[2])]
+end
+
+# Obtenir les coordonnées x, y, z et les composantes u, v, w du champ de vitesse
+x = [center[1] for center in face_centers]
+y = [center[2] for center in face_centers]
+z = [center[3] for center in face_centers]
+u = [velocity_field(center, 0.0)[1] for center in face_centers]
+v = [velocity_field(center, 0.0)[2] for center in face_centers]
+w = [velocity_field(center, 0.0)[3] for center in face_centers]
 
 """
-function move_point(point, time)
-    # Définir un vecteur de déplacement
-    displacement = [sin(time), cos(time), sin(time)*cos(time)]
+# Créer un graphique de vecteurs
+quiver(x, y, z, quiver=(u, v, w))
+
+# Afficher le graphique
+display(plot)
+readline()
+"""
+
+# Interpolation bilinéaire du champ de vitesse face centered aux points P
+function bilinear_interpolation(point, face_centers, velocity_field, t)
+    # Trouver les faces les plus proches du point
+    distances = [norm(point - center) for center in face_centers]
+    closest_faces = sortperm(distances)[1:4]
     
-    # Ajouter le vecteur de déplacement au point
-    new_point = point + displacement
+    # Calculer les coordonnées barycentriques
+    x, y, z = point
+    x1, y1, z1 = face_centers[closest_faces[1]]
+    x2, y2, z2 = face_centers[closest_faces[2]]
+    x3, y3, z3 = face_centers[closest_faces[3]]
+    x4, y4, z4 = face_centers[closest_faces[4]]
+    
+    # Calculer les aires des triangles formés par le point et les centres des faces
+    A1 = 0.5 * norm(cross([x - x1, y - y1, z - z1], [x - x2, y - y2, z - z2]))
+    A2 = 0.5 * norm(cross([x - x2, y - y2, z - z2], [x - x3, y - y3, z - z3]))
+    A3 = 0.5 * norm(cross([x - x3, y - y3, z - z3], [x - x4, y - y4, z - z4]))
+    A4 = 0.5 * norm(cross([x - x4, y - y4, z - z4], [x - x1, y - y1, z - z1]))
+    
+    # Calculer les coordonnées barycentriques
+    b1 = A1 / (A1 + A2 + A3 + A4)
+    b2 = A2 / (A1 + A2 + A3 + A4)
+    b3 = A3 / (A1 + A2 + A3 + A4)
+    b4 = A4 / (A1 + A2 + A3 + A4)
+    
+    # Interpoler le champ de vitesse
+    u1, v1, w1 = velocity_field(face_centers[closest_faces[1]], t)
+    u2, v2, w2 = velocity_field(face_centers[closest_faces[2]], t)
+    u3, v3, w3 = velocity_field(face_centers[closest_faces[3]], t)
+    u4, v4, w4 = velocity_field(face_centers[closest_faces[4]], t)
+
+    u = b1 * u1 + b2 * u2 + b3 * u3 + b4 * u4
+    v = b1 * v1 + b2 * v2 + b3 * v3 + b4 * v4
+    w = b1 * w1 + b2 * w2 + b3 * w3 + b4 * w4
+
+    return [u, v, w]
+end
+
+# Interpoler le champ de vitesse aux points P
+velocities = [bilinear_interpolation(p, face_centers, velocity_field, 0.0) for p in points_P]
+
+# Extraire les composantes u, v, w des vitesses et les coordonnées x, y, z des points
+u = [vel[1] for vel in velocities]
+v = [vel[2] for vel in velocities]
+w = [vel[3] for vel in velocities]
+x = [point[1] for point in points_P]
+y = [point[2] for point in points_P]
+z = [point[3] for point in points_P]
+
+"""
+# Créer un diagramme de quiver (flèches) pour le champ de vitesse en 3D
+quiver(x, y, z, quiver=(u, v, w))
+
+# Afficher le diagramme
+display(plot)
+readline()
+"""
+
+## Déplacer les points P le long du champ de vitesse
+# Schéma d'intégration d'Euler
+function euler_move(point, velocity, dt)
+    # Déplacer le point le long du champ de vitesse
+    new_point = point + velocity * dt
     
     return new_point
 end
 
-dt = 0.01
+# Schéma d'intégration de Runge-Kutta
+function runge_kutta_move(point, velocity, dt)
+    # Calculer les quatre "étapes" de Runge-Kutta
+    k1 = dt * velocity
+    k2 = dt * (velocity + k1 / 2)
+    k3 = dt * (velocity + k2 / 2)
+    k4 = dt * (velocity + k3)
+
+    # Mettre à jour le point en utilisant une combinaison pondérée des quatre étapes
+    new_point = point + (k1 + 2*k2 + 2*k3 + k4) / 6
+
+    return new_point
+end
+
+# Définir les paramètres de la simulation
+dt = 1.0
 t0 = 0.0
 
 # Boucle sur les pas de temps
 for step in 1:100
     t0 = 0.0 + step * dt
+    # Mettre à jour les vitesses à chaque pas de temps
+    velocities = [bilinear_interpolation(p, face_centers, velocity_field, t0) for p in points_P]
     # Déplacer chaque point
     for i in eachindex(points_P)
-        points_P[i] = move_point(points_P[i], t0)
+        points_P[i] = runge_kutta_move(points_P[i], velocities[i], dt)
     end
     
     # Créer une figure 3D pour cette étape de temps
@@ -274,7 +422,90 @@ for step in 1:100
     end
     display(p)
 end
-"""
+
+# Surveiller les propriétés du front
+function monitor_front_properties(points_prev, points_curr)
+    # Initialiser les différences de propriétés du front
+    normal_diffs = []
+    curvature_diffs = []
+    arc_length_diffs = []
+    
+    # Calculer les différences de propriétés du front pour chaque point
+    for i in 1:length(points_curr)
+        point_prev = points_prev[i]
+        point_curr = points_curr[i]
+        
+        normal_prev = normal_vector(point_prev)
+        normal_curr = normal_vector(point_curr)
+        normal_diffs = append!(normal_diffs, norm(normal_curr - normal_prev))
+        
+        curvature_prev = curvature(point_prev)
+        curvature_curr = curvature(point_curr)
+        curvature_diffs = append!(curvature_diffs, abs(curvature_curr - curvature_prev))
+        
+        if i > 1
+            arc_length_prev = arc_length(points_prev[i-1], point_prev)
+            arc_length_curr = arc_length(points_curr[i-1], point_curr)
+            arc_length_diffs = append!(arc_length_diffs, abs(arc_length_curr - arc_length_prev))
+        end
+    end
+    
+    # Retourner les différences de propriétés du front
+    return normal_diffs, curvature_diffs, arc_length_diffs
+end
+
+# Seuils pour la rééchantillonnage
+const THRESHOLD_NORMAL_DIFF = 0.1
+const THRESHOLD_CURVATURE_DIFF = 0.1
+const THRESHOLD_ARC_LENGTH_DIFF = 0.1
+
+# Vérifier si le rééchantillonnage est nécessaire
+function check_resampling_needed(points_prev, points_curr)
+    # Surveiller les propriétés du front
+    normal_diffs, curvature_diffs, arc_length_diffs = monitor_front_properties(points_prev, points_curr)
+    
+    # Vérifier si les différences maximales dépassent les seuils
+    if maximum(normal_diffs) > THRESHOLD_NORMAL_DIFF || maximum(curvature_diffs) > THRESHOLD_CURVATURE_DIFF || maximum(arc_length_diffs) > THRESHOLD_ARC_LENGTH_DIFF
+        return true
+    else
+        return false
+    end
+end
+
+# Seuils pour l'ajout et la suppression de points
+const THRESHOLD_ADD_POINT = 0.2
+const THRESHOLD_REMOVE_POINT = 0.05
+
+# Rééchantillonner le front
+function resample_front(points)
+    # Surveiller les propriétés du front
+    normal_diffs, curvature_diffs, arc_length_diffs = monitor_front_properties(points[1:end-1], points[2:end])
+    
+    # Initialiser les nouveaux points
+    new_points = [points[1]]
+    
+    # Parcourir les points du front
+    for i in 2:length(points)-1
+        # Si la différence de courbure ou de normale est grande, ajouter un point
+        if curvature_diffs[i-1] > THRESHOLD_ADD_POINT || normal_diffs[i-1] > THRESHOLD_ADD_POINT
+            new_point = (points[i-1] + points[i]) / 2
+            append!(new_points, new_point)
+        end
+        
+        # Si la différence de courbure ou de normale est petite et la longueur d'arc est grande, supprimer un point
+        if curvature_diffs[i-1] < THRESHOLD_REMOVE_POINT && normal_diffs[i-1] < THRESHOLD_REMOVE_POINT && arc_length_diffs[i-1] > THRESHOLD_REMOVE_POINT
+            continue
+        end
+        
+        append!(new_points, points[i])
+    end
+    
+    # Ajouter le dernier point
+    append!(new_points, points[end])
+    
+    # Retourner les nouveaux points
+    return new_points
+end
 
 """
 # Définir les sommets du cube
