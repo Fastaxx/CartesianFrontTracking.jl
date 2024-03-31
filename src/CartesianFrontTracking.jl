@@ -128,6 +128,97 @@ end
 display(p)
 readline()
 
+"""
+using Interpolations
+
+# Initialiser les listes de coordonnées
+x_coords = [point[1] for point in points_P]
+y_coords = [point[2] for point in points_P]
+z_coords = [point[3] for point in points_P]
+
+# Créer une interpolation spline cubique pour chaque dimension
+x_spline = CubicSplineInterpolation(1:length(x_coords), x_coords)
+y_spline = CubicSplineInterpolation(1:length(y_coords), y_coords)
+z_spline = CubicSplineInterpolation(1:length(z_coords), z_coords)
+
+# Utiliser les interpolations pour obtenir une version lissée des points
+x_smooth = x_spline(1:0.1:length(x_coords))
+y_smooth = y_spline(1:0.1:length(y_coords))
+z_smooth = z_spline(1:0.1:length(z_coords))
+
+# Créer une figure 3D
+p = plot(legend = false, xlims = (-5, 5), ylims = (-5, 5), zlims = (-5, 5))
+
+# Ajouter les points lissés à la figure
+scatter!(p, x_smooth, y_smooth, z_smooth, color = :red, markersize = 4)
+
+# Relier les points lissés
+plot3d!(p, x_smooth, y_smooth, z_smooth, color = :blue)
+
+# Afficher la figure
+display(p)
+readline()
+
+using ForwardDiff
+
+# Définir les fonctions pour les splines
+x_func(t) = x_spline[t]
+y_func(t) = y_spline[t]
+z_func(t) = z_spline[t]
+
+# Calculer les dérivées premières
+x_prime_func(t) = ForwardDiff.derivative(x_func, t)
+y_prime_func(t) = ForwardDiff.derivative(y_func, t)
+z_prime_func(t) = ForwardDiff.derivative(z_func, t)
+
+# Calculer les dérivées secondes
+x_double_prime_func(t) = ForwardDiff.derivative(x_prime_func, t)
+y_double_prime_func(t) = ForwardDiff.derivative(y_prime_func, t)
+z_double_prime_func(t) = ForwardDiff.derivative(z_prime_func, t)
+
+# Calculer la courbure pour chaque point t
+t_values = 1:0.1:length(x_coords)
+curvature = [sqrt((x_prime_func(t) * y_double_prime_func(t) - y_prime_func(t) * x_double_prime_func(t))^2 +
+                  (x_prime_func(t) * z_double_prime_func(t) - z_prime_func(t) * x_double_prime_func(t))^2 +
+                  (y_prime_func(t) * z_double_prime_func(t) - z_prime_func(t) * y_double_prime_func(t))^2) / 
+                  (x_prime_func(t)^2 + y_prime_func(t)^2 + z_prime_func(t)^2)^(3/2) for t in t_values]
+@show curvature
+readline()
+
+# Calculer les vecteurs normaux pour chaque point t
+normal_vectors = [(x_prime_func(t) * y_double_prime_func(t) - y_prime_func(t) * x_double_prime_func(t), 
+                   x_prime_func(t) * z_double_prime_func(t) - z_prime_func(t) * x_double_prime_func(t), 
+                   y_prime_func(t) * z_double_prime_func(t) - z_prime_func(t) * y_double_prime_func(t)) for t in t_values]
+
+# Normaliser les vecteurs normaux
+normal_vectors = [let v = (x, y, z)
+    [x / norm(v), y / norm(v), z / norm(v)]
+end for (x, y, z) in normal_vectors]
+
+@show normal_vectors
+readline()
+
+# Extraire les coordonnées x, y et z des points de la courbe
+x_values = [x_func(t) for t in t_values]
+y_values = [y_func(t) for t in t_values]
+z_values = [z_func(t) for t in t_values]
+
+# Extraire les composantes x, y et z des vecteurs normaux
+normal_x = [x for (x, y, z) in normal_vectors]
+normal_y = [y for (x, y, z) in normal_vectors]
+normal_z = [z for (x, y, z) in normal_vectors]
+
+# Créer un nouveau tracé 3D
+p = plot3d(x_values, y_values, z_values, label="Curve")
+
+# Ajouter les vecteurs normaux au tracé
+quiver!(p, x_values, y_values, z_values, quiver=(normal_x, normal_y, normal_z), label="Normal vectors")
+
+# Afficher le tracé
+display(p)
+readline()
+"""
+
 #Etat Initial : Les zéros ont été repérés dans l'espace 3D : (xp,yp,zp). 
 #Les zéros sont les points où la fonction Phi s'annule.
 
