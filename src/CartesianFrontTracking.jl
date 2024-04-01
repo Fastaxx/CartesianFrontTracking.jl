@@ -5,29 +5,15 @@ using ColorSchemes
 using Roots
 using Plots
 Plots.default(show = true)
+using Interpolations
+using ForwardDiff
+using Statistics
 
 # Write your package code here.
 
-struct Mesh
-    grids::Array{Vector{Float64}, 1}
-end
 
-# Pour une grille 1D
-x = collect(-5:0.5:5)
-mesh1D = Mesh([x])
 
-# Pour une grille 2D
-y = collect(-5:0.5:5)
-mesh2D = Mesh([x, y])
 
-# Pour une grille 3D
-z = collect(-5:0.5:5)
-mesh3D = Mesh([x, y, z])
-
-# Extraire les coordonnées x, y et z du maillage
-x_coords = mesh3D.grids[1]
-y_coords = mesh3D.grids[2]
-z_coords = mesh3D.grids[3]
 
 # Générer tous les points du maillage
 points = []
@@ -129,7 +115,6 @@ display(p)
 readline()
 
 """
-using Interpolations
 
 # Initialiser les listes de coordonnées
 x_coords = [point[1] for point in points_P]
@@ -158,8 +143,6 @@ plot3d!(p, x_smooth, y_smooth, z_smooth, color = :blue)
 # Afficher la figure
 display(p)
 readline()
-
-using ForwardDiff
 
 # Définir les fonctions pour les splines
 x_func(t) = x_spline[t]
@@ -231,7 +214,6 @@ end
 arc_lengths = [arc_length(points_P[i], points_P[i+1]) for i in 1:length(points_P)-1]
 
 # Calcul de la normale à la surface
-using ForwardDiff
 
 # Définir la fonction Phi
 function Phi(point)
@@ -375,7 +357,6 @@ end
 # Repérer les faces de chaque cellule
 faces = cell_faces(mesh3D.grids)
 
-using Statistics
 
 # Calculer le centre d'une face
 function face_center(face)
