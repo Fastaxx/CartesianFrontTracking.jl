@@ -11,9 +11,26 @@ using Statistics
 
 # Write your package code here.
 
+struct Mesh
+    grids::Array{Vector{Float64}, 1}
+end
 
+# Pour une grille 1D
+x = collect(-5:0.5:5)
+mesh1D = Mesh([x])
 
+# Pour une grille 2D
+y = collect(-5:0.5:5)
+mesh2D = Mesh([x, y])
 
+# Pour une grille 3D
+z = collect(-5:0.5:5)
+mesh3D = Mesh([x, y, z])
+
+# Extraire les coordonnées x, y et z du maillage
+x_coords = mesh3D.grids[1]
+y_coords = mesh3D.grids[2]
+z_coords = mesh3D.grids[3]
 
 # Générer tous les points du maillage
 points = []
